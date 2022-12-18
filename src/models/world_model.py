@@ -7,7 +7,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from dataset import Batch
-from .kv_caching import KeysValues
 from .slicer import Embedder, Head
 from .tokenizer import Tokenizer
 from .transformer import Transformer, TransformerConfig
@@ -34,8 +33,7 @@ class WorldModel(nn.Module):
         self.embedder = Embedder(
             max_blocks=config.max_blocks,
             block_masks=[act_tokens_pattern, obs_tokens_pattern],
-            embedding_tables=nn.ModuleList([nn.Embedding(act_vocab_size, config.embed_dim), nn.Embedding(obs_vocab_size, config.embed_dim)])
-        )
+            embedding_tables=nn.ModuleList([nn.Embedding(act_vocab_size, config.embed_dim), nn.Embedding(obs_vocab_size, config.embed_dim)]))
 
         self.head_observations = Head(
             max_blocks=config.max_blocks,
@@ -43,9 +41,7 @@ class WorldModel(nn.Module):
             head_module=nn.Sequential(
                 nn.Linear(config.embed_dim, config.embed_dim),
                 nn.ReLU(),
-                nn.Linear(config.embed_dim, obs_vocab_size)
-            )
-        )
+                nn.Linear(config.embed_dim, obs_vocab_size)))
 
         self.head_rewards = Head(
             max_blocks=config.max_blocks,
@@ -53,9 +49,7 @@ class WorldModel(nn.Module):
             head_module=nn.Sequential(
                 nn.Linear(config.embed_dim, config.embed_dim),
                 nn.ReLU(),
-                nn.Linear(config.embed_dim, 3)
-            )
-        )
+                nn.Linear(config.embed_dim, 3)))
 
         self.head_ends = Head(
             max_blocks=config.max_blocks,
@@ -63,41 +57,34 @@ class WorldModel(nn.Module):
             head_module=nn.Sequential(
                 nn.Linear(config.embed_dim, config.embed_dim),
                 nn.ReLU(),
-                nn.Linear(config.embed_dim, 2)
-            )
-        )
+                nn.Linear(config.embed_dim, 2)))
 
         self.apply(init_weights)
 
     def __repr__(self) -> str:
         return "world_model"
 
-    def forward(self, tokens: torch.LongTensor, past_keys_values: Optional[KeysValues] = None) -> WorldModelOutput:
-
+    def forward(self, tokens: torch.LongTensor, past_keys_values: Optional[torch.Tensor] = None) -> Tuple[WorldModelOutput, torch.Tensor]:
         num_steps = tokens.size(1)  # (B, T)
         assert num_steps <= self.config.max_tokens
-        prev_steps = 0 if past_keys_values is None else past_keys_values.size
+        prev_steps = 0 if past_keys_values is None else past_keys_values.shape[4]
 
         sequences = self.embedder(tokens, num_steps, prev_steps) + self.pos_emb(prev_steps + torch.arange(num_steps, device=tokens.device))
-
-        x = self.transformer(sequences, past_keys_values)
+        x, kv = self.transformer(sequences, past_keys_values)
 
         logits_observations = self.head_observations(x, num_steps=num_steps, prev_steps=prev_steps)
         logits_rewards = self.head_rewards(x, num_steps=num_steps, prev_steps=prev_steps)
         logits_ends = self.head_ends(x, num_steps=num_steps, prev_steps=prev_steps)
 
-        return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends)
+        return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends), kv
 
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, **kwargs: Any) -> LossWithIntermediateLosses:
-
         with torch.no_grad():
             obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
 
         act_tokens = rearrange(batch['actions'], 'b l -> b l 1')
         tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
-
         outputs = self(tokens)
-
         labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(obs_tokens, batch['rewards'], batch['ends'], batch['mask_padding'])
 
         logits_observations = rearrange(outputs.logits_observations[:, :-1], 'b t o -> (b t) o')
