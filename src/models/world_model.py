@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from collections import namedtuple
 from typing import Any, Optional, Tuple
 
 from einops import rearrange
@@ -13,13 +13,7 @@ from .tokenizer import Tokenizer
 from .transformer import Transformer, TransformerConfig
 from utils import init_weights, LossWithIntermediateLosses
 
-
-@dataclass
-class WorldModelOutput:
-    output_sequence: torch.FloatTensor
-    logits_observations: torch.FloatTensor
-    logits_rewards: torch.FloatTensor
-    logits_ends: torch.FloatTensor
+WorldModelOutput = namedtuple('WorldModelOutput', ['output_sequence', 'logits_observations', 'logits_rewards', 'logits_ends'])
 
 
 class WorldModel(nn.Module):
