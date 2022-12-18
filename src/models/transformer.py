@@ -4,7 +4,7 @@ Credits to https://github.com/karpathy/minGPT
 
 from dataclasses import dataclass
 import math
-from typing import Optional
+from typing import Tuple, Optional
 
 from einops import rearrange
 import torch
@@ -45,17 +45,16 @@ class Transformer(nn.Module):
         device = self.ln_f.weight.device  # Assumption that all submodules are on the same device
         return KeysValues(n, self.config.num_heads, max_tokens, self.config.embed_dim, self.config.num_layers, device)
 
-    def forward(self, sequences: torch.Tensor, past_keys_values: Optional[KeysValues] = None) -> torch.Tensor:
+    def forward(self, sequences: torch.Tensor, past_keys_values: Optional[KeysValues] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         assert past_keys_values is None or len(past_keys_values) == len(self.blocks)
         x = self.drop(sequences)
-        ks, vs = [], []
+        kvs = []
         for i, block in enumerate(self.blocks):
-            x, k, v = block(x, None if past_keys_values is None else past_keys_values[i])
-            ks.append(k)
-            vs.append(v)
+            x, kv = block(x, None if past_keys_values is None else past_keys_values[i].get())
+            kvs.append(kv)
 
         x = self.ln_f(x)
-        return x, ks, vs
+        return x, torch.stack(kvs, 0)
 
 
 class Block(nn.Module):
@@ -71,11 +70,11 @@ class Block(nn.Module):
             nn.Dropout(config.resid_pdrop),
         )
 
-    def forward(self, x: torch.Tensor, past_keys_values: Optional[KeysValues] = None) -> torch.Tensor:
-        x_attn, k, v = self.attn(self.ln1(x), past_keys_values)
+    def forward(self, x: torch.Tensor, past: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        x_attn, kv = self.attn(self.ln1(x), past)
         x = x + x_attn
         x = x + self.mlp(self.ln2(x))
-        return x, k, v
+        return x, kv
 
 
 class SelfAttention(nn.Module):
@@ -92,25 +91,25 @@ class SelfAttention(nn.Module):
         self.proj = nn.Linear(config.embed_dim, config.embed_dim)
 
         causal_mask = torch.tril(torch.ones(config.max_tokens, config.max_tokens))
-        block_causal_mask = torch.max(causal_mask, torch.block_diag(*[torch.ones(config.tokens_per_block, config.tokens_per_block) for _ in range(config.max_blocks)]))
+        ones = [torch.ones(config.tokens_per_block, config.tokens_per_block) for _ in range(config.max_blocks)]
+        block_causal_mask = torch.max(causal_mask, torch.block_diag(*ones))
         self.register_buffer('mask', causal_mask if config.attention == 'causal' else block_causal_mask)
 
-    def forward(self, x: torch.Tensor, kv_cache: Optional[KVCache] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, kv_cache: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         B, T, C = x.size()
         if kv_cache is not None:
-            b, nh, L, c = kv_cache.shape
+            _, b, nh, L, c = kv_cache.shape
             assert nh == self.num_heads and b == B and c * nh == C
         else:
             L = 0
 
-        q = qt = self.query(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
+        q =      self.query(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
         k = kt = self.key(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)     # (B, nh, T, hs)
         v = vt = self.value(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
 
         if kv_cache is not None:
-            k, v = kv_cache.get()
-            k = torch.cat([k, kt], 2)
-            v = torch.cat([v, vt], 2)
+            k = torch.cat([kv_cache[0], k], 2)
+            v = torch.cat([kv_cache[1], v], 2)
 
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         att = att.masked_fill(self.mask[L:L + T, :L + T] == 0, float('-inf'))
@@ -121,4 +120,4 @@ class SelfAttention(nn.Module):
 
         y = self.resid_drop(self.proj(y))
 
-        return y, kt, vt
+        return y, torch.stack([kt, vt], 0)

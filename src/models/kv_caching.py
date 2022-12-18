@@ -23,14 +23,12 @@ class KVCache:
     def get(self) -> torch.Tensor:
         return self._cache[:, :, :, :self._size, :]
 
-    def update(self, k: torch.Tensor, v: torch.Tensor) -> None:
-        assert k.size(2) == v.size(2)
-        for x in (k, v):
-          assert x.ndim == self._cache.ndim-1
-          assert all([x.size(i) == self._cache.size(i+1) for i in (0, 1, 3)])
-          assert self._size + x.size(2) <= self._cache.size(3)
-        self._cache[:, :, :, self._size : self._size + k.size(2)] = torch.stack([k, v], 0)
-        self._size += k.size(2)
+    def update(self, kv: torch.Tensor) -> None:
+        assert kv.ndim == self._cache.ndim
+        assert all([kv.size(i) == self._cache.size(i) for i in (0, 1, 2, 4)])
+        assert self._size + kv.size(3) <= self._cache.size(3)
+        self._cache[:, :, :, self._size : self._size + kv.size(3)] = kv
+        self._size += kv.size(3)
 
 
 class KeysValues:
@@ -45,7 +43,7 @@ class KeysValues:
 
     @property
     def size(self):
-        return self._keys_values[0].shape[2]
+        return self._keys_values[0].shape[3]
 
     def reset(self) -> None:
         for kv_cache in self._keys_values:
