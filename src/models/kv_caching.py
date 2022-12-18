@@ -29,7 +29,7 @@ class KVCache:
           assert x.ndim == self._cache.ndim-1
           assert all([x.size(i) == self._cache.size(i+1) for i in (0, 1, 3)])
           assert self._size + x.size(2) <= self._cache.size(3)
-        self._cache = AssignWithoutInplaceCheck.apply(self._cache, torch.stack([k, v], 0), 3, self._size, self._size + x.size(2))
+        self._cache[:, :, :, self._size : self._size + k.size(2)] = torch.stack([k, v], 0)
         self._size += k.size(2)
 
 
@@ -50,26 +50,3 @@ class KeysValues:
     def reset(self) -> None:
         for kv_cache in self._keys_values:
             kv_cache.reset()
-
-
-class AssignWithoutInplaceCheck(torch.autograd.Function):
-    """
-    Inspired from : https://discuss.pytorch.org/t/disable-in-place-correctness-version-check-any-other-workaround/90738/4
-    Warning : do not use it to overwrite a slice twice.
-    """
-
-    @staticmethod
-    def get_slice(dim: int, start: int, stop: int) -> Tuple[slice]:
-        return tuple([slice(None), ] * dim + [slice(start, stop)])
-
-    @staticmethod
-    def forward(ctx, input: torch.Tensor, value: torch.Tensor, dim: int, start: int, stop: int) -> torch.Tensor:
-        ctx.dim = dim
-        ctx.start = start
-        ctx.stop = stop
-        input.data[AssignWithoutInplaceCheck.get_slice(dim, start, stop)] = value
-        return input
-
-    @staticmethod
-    def backward(ctx, grad_out: torch.Tensor) -> Tuple[torch.Tensor]:
-        return grad_out, grad_out[AssignWithoutInplaceCheck.get_slice(ctx.dim, ctx.start, ctx.stop)], None, None, None

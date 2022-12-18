@@ -17,10 +17,11 @@ config = TransformerConfig(
     resid_pdrop = 0.1,
     attn_pdrop = 0.1)
 
+bs = 4
 transformer = Transformer(config).eval()
-data = torch.rand(4, 32, 256)
+data = torch.rand(bs, 32, 256)
 with torch.no_grad():
-  result = transformer(data) # run once to load everything in
+  result, _, _ = transformer(data) # run once to load everything in
 assert data.shape == result.shape
 
 ref_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'transformer_ref.pkl')
@@ -33,16 +34,34 @@ else:
   torch.testing.assert_close(ref['result'], result)
   print("Refs match")
 
-kv_cache = transformer.generate_empty_keys_values(n=4, max_tokens=32)
+# Test with kv cache
+kv_cache = transformer.generate_empty_keys_values(n=bs, max_tokens=32)
 for i in range(32):
   with torch.no_grad():
-    step = transformer(data[:,i:i+1], kv_cache)
+    step, k, v = transformer(data[:,i:i+1], kv_cache)
   torch.testing.assert_close(step, result[:,i:i+1])
+  for kv_layer, kl, vl in zip(kv_cache, k, v):
+    kv_layer.update(kl, vl)
 
+# Test timing w/cache
+print("Timing, w/o cache, t=32")
 for _ in range(10):
   st = time.monotonic()
   with torch.no_grad():
     result = transformer(data)
+  tt = time.monotonic() - st
+  print(f"- Performed inference in {tt*1000:.2f}ms")
+  assert tt < .02
+
+# Test timing w/cache
+print("Timing, w/cache, t=1")
+kv_cache = transformer.generate_empty_keys_values(n=bs, max_tokens=10)
+for i in range(10):
+  st = time.monotonic()
+  with torch.no_grad():
+    step, k, v = transformer(data[:,i:i+1], kv_cache)
+  for kv_layer, kl, vl in zip(kv_cache, k, v):
+    kv_layer.update(kl, vl)
   tt = time.monotonic() - st
   print(f"Performed inference in {tt*1000:.2f}ms")
   assert tt < .02

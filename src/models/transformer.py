@@ -48,11 +48,14 @@ class Transformer(nn.Module):
     def forward(self, sequences: torch.Tensor, past_keys_values: Optional[KeysValues] = None) -> torch.Tensor:
         assert past_keys_values is None or len(past_keys_values) == len(self.blocks)
         x = self.drop(sequences)
+        ks, vs = [], []
         for i, block in enumerate(self.blocks):
-            x = block(x, None if past_keys_values is None else past_keys_values[i])
+            x, k, v = block(x, None if past_keys_values is None else past_keys_values[i])
+            ks.append(k)
+            vs.append(v)
 
         x = self.ln_f(x)
-        return x
+        return x, ks, vs
 
 
 class Block(nn.Module):
@@ -69,10 +72,10 @@ class Block(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, past_keys_values: Optional[KeysValues] = None) -> torch.Tensor:
-        x_attn = self.attn(self.ln1(x), past_keys_values)
+        x_attn, k, v = self.attn(self.ln1(x), past_keys_values)
         x = x + x_attn
         x = x + self.mlp(self.ln2(x))
-        return x
+        return x, k, v
 
 
 class SelfAttention(nn.Module):
@@ -100,13 +103,14 @@ class SelfAttention(nn.Module):
         else:
             L = 0
 
-        q = self.query(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
-        k = self.key(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)     # (B, nh, T, hs)
-        v = self.value(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
+        q = qt = self.query(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
+        k = kt = self.key(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)     # (B, nh, T, hs)
+        v = vt = self.value(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
 
         if kv_cache is not None:
-            kv_cache.update(k, v)
             k, v = kv_cache.get()
+            k = torch.cat([k, kt], 2)
+            v = torch.cat([v, vt], 2)
 
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         att = att.masked_fill(self.mask[L:L + T, :L + T] == 0, float('-inf'))
@@ -117,4 +121,4 @@ class SelfAttention(nn.Module):
 
         y = self.resid_drop(self.proj(y))
 
-        return y
+        return y, kt, vt
