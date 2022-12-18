@@ -70,10 +70,6 @@ class ActorCritic(nn.Module):
                     with torch.no_grad():
                         self(burnin_observations[:, i], mask_padding[:, i])
 
-    def prune(self, mask: np.ndarray) -> None:
-        self.hx = self.hx[mask]
-        self.cx = self.cx[mask]
-
     def forward(self, inputs: torch.FloatTensor, mask_padding: Optional[torch.BoolTensor] = None) -> ActorCriticOutput:
         assert inputs.ndim == 4 and inputs.shape[1:] == (3, 64, 64)
         assert 0 <= inputs.min() <= 1 and 0 <= inputs.max() <= 1
