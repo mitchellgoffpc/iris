@@ -38,10 +38,9 @@ else:
 kv_cache = transformer.generate_empty_keys_values(n=bs, max_tokens=32)
 for i in range(32):
   with torch.no_grad():
-    step, kv = transformer(data[:,i:i+1], kv_cache)
+    step, kv = transformer(data[:,i:i+1], kv_cache.get())
   torch.testing.assert_close(step, result[:,i:i+1])
-  for kv_layer, kvl in zip(kv_cache, kv):
-    kv_layer.update(kvl)
+  kv_cache.update(kv)
 
 # Test timing w/cache
 print("Timing, w/o cache, t=32")
@@ -59,9 +58,8 @@ kv_cache = transformer.generate_empty_keys_values(n=bs, max_tokens=10)
 for i in range(10):
   st = time.monotonic()
   with torch.no_grad():
-    _, kv = transformer(data[:,i:i+1], kv_cache)
-  for kv_layer, kvl in zip(kv_cache, kv):
-    kv_layer.update(kvl)
+    _, kv = transformer(data[:,i:i+1], kv_cache.get())
+  kv_cache.update(kv)
   tt = time.monotonic() - st
   print(f"Performed inference in {tt*1000:.2f}ms")
-  assert tt < .02
+  assert tt < .01
