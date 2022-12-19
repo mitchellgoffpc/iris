@@ -54,7 +54,8 @@ for _ in range(10):
     world_model(data)
   tt = time.monotonic() - st
   print(f"- Performed inference in {tt*1000:.2f}ms")
-  assert tt < .02
+  if '--slow-ok' not in sys.argv:
+    assert tt < .02
 
 # Test timing w/cache
 print("Timing, w/cache, t=1")
@@ -66,4 +67,5 @@ for i in range(10):
   kv_cache.update(step.keys_values)
   tt = time.monotonic() - st
   print(f"Performed inference in {tt*1000:.2f}ms")
-  assert tt < .01
+  if '--slow-ok' not in sys.argv:
+    assert tt < .01

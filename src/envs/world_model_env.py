@@ -23,7 +23,7 @@ class WorldModelEnv:
         dummy_tokens = torch.zeros(4, 16, dtype=torch.long)
         dummy_kv = world_model.transformer.generate_empty_keys_values(4, self.world_model.config.max_tokens // 2)
         dummy_kv._size = self.world_model.config.max_tokens // 2
-        torch.onnx.export(self.world_model, (dummy_tokens, dummy_kv.get()), '/tmp/wm.onnx',
+        torch.onnx.export(self.world_model, (dummy_tokens, dummy_kv.get()), '/tmp/wm.onnx', opset_version=11,
           input_names=['tokens', 'past'],
           output_names=['output_seq', 'logits_obs', 'logits_reward', 'logits_done', 'kv'],
           dynamic_axes={

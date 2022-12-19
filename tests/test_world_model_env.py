@@ -57,7 +57,7 @@ if '--update'  in sys.argv:
 else:
   ref = torch.load(ref_path)
   torch.testing.assert_close(ref['initial_obs'], initial_obs)
-  torch.testing.assert_close(ref['obs'], obs)
+  torch.testing.assert_close(ref['obs'], obs, atol=3e-5, rtol=1e-6)
   torch.testing.assert_close(ref['rewards'], rewards)
   torch.testing.assert_close(ref['dones'], dones)
   print("Refs match")
