@@ -24,7 +24,7 @@ class KVCache:
 
     def update(self, kv: torch.Tensor) -> None:
         assert kv.ndim == self._cache.ndim
-        assert all([kv.size(i) == self._cache.size(i) for i in (0, 1, 2, 3, 5)])
-        assert self._size + kv.size(4) <= self._cache.size(4)
-        self._cache[:, :, :, :, self._size : self._size + kv.size(4)] = kv
-        self._size += kv.size(4)
+        assert all([kv.shape[i] == self._cache.shape[i] for i in (0, 1, 2, 3, 5)])
+        assert self._size + kv.shape[4] <= self._cache.shape[4]
+        self._cache[:, :, :, :, self._size : self._size + kv.shape[4]] = kv
+        self._size += kv.shape[4]

@@ -18,6 +18,27 @@ class WorldModelEnv:
         self.keys_values_wm, self.obs_tokens, self._num_observations_tokens = None, None, None
         self.env = env
 
+        import onnx, numpy as np
+        dummy_tokens = torch.zeros(1, 1, dtype=torch.long)
+        dummy_kv = world_model.transformer.generate_empty_keys_values(1, 1)
+        dummy_kv._size = 1
+        torch.onnx.export(self.world_model, (dummy_tokens, dummy_kv.get()), '/tmp/wm.onnx',
+          input_names=['tokens', 'past'],
+          output_names=['output_seq', 'logits_obs', 'logits_reward', 'logits_done', 'kv'],
+          dynamic_axes={
+            'tokens': {0: 'b', 1: 't'},
+            'past': {2: 'b', 4: 't_past'},
+            'output_seq': {0: 'b', 1: 't', 2: 'e'},
+            'logits_obs': {0: 'b', 1: 't_obs'},
+            'logits_reward': {0: 'b', 1: 't_reward'},
+            'logits_done': {0: 'b', 1: 't_done'},
+            'kv': {2: 'b', 3: 'nh', 4: 't', 5: 'hs'}})
+
+        import onnxruntime as ort
+        self.wm_runner = ort.InferenceSession('/tmp/wm.onnx', None, ['CPUExecutionProvider'])
+        # print([(x.name, x.shape) for x in runner.get_inputs()])
+        # print([(x.name, x.shape) for x in runner.get_outputs()])
+
     @property
     def num_observations_tokens(self) -> int:
         return self._num_observations_tokens
