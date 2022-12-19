@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 
-class KeysValues:
+class KVCache:
     def __init__(self, num_samples: int, num_heads: int, max_tokens: int, embed_dim: int, num_layers: int, device: torch.device) -> None:
         assert embed_dim % num_heads == 0
         self._n, self._cache, self._size = num_samples, None, None

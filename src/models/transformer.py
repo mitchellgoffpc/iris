@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from .kv_caching import KeysValues
+from .kv_caching import KVCache
 
 
 @dataclass
@@ -41,9 +41,9 @@ class Transformer(nn.Module):
         self.blocks = nn.ModuleList([Block(config) for _ in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(config.embed_dim)
 
-    def generate_empty_keys_values(self, n: int, max_tokens: int) -> KeysValues:
+    def generate_empty_keys_values(self, n: int, max_tokens: int) -> KVCache:
         device = self.ln_f.weight.device  # Assumption that all submodules are on the same device
-        return KeysValues(n, self.config.num_heads, max_tokens, self.config.embed_dim, self.config.num_layers, device)
+        return KVCache(n, self.config.num_heads, max_tokens, self.config.embed_dim, self.config.num_layers, device)
 
     def forward(self, sequences: torch.Tensor, past_keys_values: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         assert past_keys_values is None or len(past_keys_values) == len(self.blocks)

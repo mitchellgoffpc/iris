@@ -11,15 +11,11 @@ import torchvision
 
 
 class WorldModelEnv:
-
     def __init__(self, tokenizer: torch.nn.Module, world_model: torch.nn.Module, device: Union[str, torch.device], env: Optional[gym.Env] = None) -> None:
-
         self.device = torch.device(device)
         self.world_model = world_model.to(self.device).eval()
         self.tokenizer = tokenizer.to(self.device).eval()
-
         self.keys_values_wm, self.obs_tokens, self._num_observations_tokens = None, None, None
-
         self.env = env
 
     @property
@@ -57,17 +53,14 @@ class WorldModelEnv:
         assert self.keys_values_wm is not None and self.num_observations_tokens is not None
 
         num_passes = 1 + self.num_observations_tokens if should_predict_next_obs else 1
-
-        output_sequence, obs_tokens = [], []
-
         if self.keys_values_wm.size + num_passes > self.world_model.config.max_tokens:
             self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
 
         token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
         token = token.reshape(-1, 1).to(self.device)  # (B, 1)
 
+        output_sequence, obs_tokens = [], []
         for k in range(num_passes):  # assumption that there is only one action token.
-
             outputs_wm, kv = self.world_model(token, past_keys_values=self.keys_values_wm.get())
             output_sequence.append(outputs_wm.output_sequence)
             self.keys_values_wm.update(kv)
