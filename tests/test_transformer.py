@@ -24,7 +24,7 @@ with torch.no_grad():
   result, _ = transformer(data) # run once to load everything in
 assert data.shape == result.shape
 
-ref_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'transformer_ref.pkl')
+ref_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'refs/transformer_ref.pkl')
 if '--update'  in sys.argv:
   torch.save({'data': data, 'result': result}, ref_path)
   print("Updated refs")

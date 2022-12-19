@@ -50,7 +50,7 @@ for _ in range(10):
   print(f"- Performed step in {tt*1000:.2f}ms")
 
 obs = torch.stack(obs)
-ref_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'world_model_env_ref.pkl')
+ref_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'refs/world_model_env_ref.pkl')
 if '--update'  in sys.argv:
   torch.save({'initial_obs': initial_obs, 'obs': obs, 'rewards': rewards, 'dones': dones}, ref_path)
   print("Updated refs")

@@ -24,7 +24,7 @@ data = torch.randint(512, size=(bs, 32))
 with torch.no_grad():
   result, _ = world_model(data) # run once to load everything in
 
-ref_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'world_model_ref.pkl')
+ref_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'refs/world_model_ref.pkl')
 if '--update'  in sys.argv:
   torch.save({'data': data, 'result': result}, ref_path)
   print("Updated refs")
