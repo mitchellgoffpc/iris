@@ -36,8 +36,14 @@ class WorldModelEnv:
 
         import onnxruntime as ort
         self.wm_runner = ort.InferenceSession('/tmp/wm.onnx', None, ['CPUExecutionProvider'])
-        # print([(x.name, x.shape) for x in runner.get_inputs()])
-        # print([(x.name, x.shape) for x in runner.get_outputs()])
+        print([(x.name, x.shape) for x in self.wm_runner.get_inputs()])
+        print([(x.name, x.shape) for x in self.wm_runner.get_outputs()])
+
+        # import time
+        # for _ in range(10):
+        #   st = time.monotonic()
+        #   self.wm_runner.run(None, {'tokens': dummy_tokens.numpy(), 'past': dummy_kv.get().numpy()})
+        #   print(f"- WM inference in {(time.monotonic() - st)*1000:.2f}ms")
 
     @property
     def num_observations_tokens(self) -> int:
