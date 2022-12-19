@@ -22,7 +22,7 @@ bs = 4
 world_model = WorldModel(512, 512, config).eval()
 data = torch.randint(512, size=(bs, 32))
 with torch.no_grad():
-  result, _ = world_model(data) # run once to load everything in
+  result = world_model(data) # run once to load everything in
 
 ref_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'refs/world_model_ref.pkl')
 if '--update'  in sys.argv:
@@ -36,11 +36,11 @@ else:
 
 # Test with kv cache
 kv_cache = world_model.transformer.generate_empty_keys_values(n=bs, max_tokens=32)
-idxs = {k:0 for k in WorldModelOutput._fields}
+idxs = {k:0 for k in WorldModelOutput._fields if k != 'keys_values'}
 for i in range(32):
   with torch.no_grad():
-    step, kv = world_model(data[:,i:i+1], kv_cache.get())
-  kv_cache.update(kv)
+    step = world_model(data[:,i:i+1], kv_cache.get())
+  kv_cache.update(step.keys_values)
   for k in idxs:
     s, r, j = step._asdict()[k], result._asdict()[k], idxs[k]
     torch.testing.assert_close(s, r[:,j:j+s.shape[1]])
@@ -62,8 +62,8 @@ kv_cache = world_model.transformer.generate_empty_keys_values(n=bs, max_tokens=1
 for i in range(10):
   st = time.monotonic()
   with torch.no_grad():
-    _, kv = world_model(data[:,i:i+1], kv_cache.get())
-  kv_cache.update(kv)
+    step = world_model(data[:,i:i+1], kv_cache.get())
+  kv_cache.update(step.keys_values)
   tt = time.monotonic() - st
   print(f"Performed inference in {tt*1000:.2f}ms")
   assert tt < .01

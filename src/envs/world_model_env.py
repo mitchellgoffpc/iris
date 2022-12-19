@@ -45,8 +45,8 @@ class WorldModelEnv:
         n, num_observations_tokens = obs_tokens.shape
         assert num_observations_tokens == self.num_observations_tokens
         self.keys_values_wm = self.world_model.transformer.generate_empty_keys_values(n=n, max_tokens=self.world_model.config.max_tokens)
-        _, kv = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm.get())
-        self.keys_values_wm.update(kv)
+        outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm.get())
+        self.keys_values_wm.update(outputs_wm.keys_values)
 
     @torch.no_grad()
     def step(self, action: Union[int, np.ndarray, torch.LongTensor], should_predict_next_obs: bool = True) -> None:
@@ -61,9 +61,9 @@ class WorldModelEnv:
 
         output_sequence, obs_tokens = [], []
         for k in range(num_passes):  # assumption that there is only one action token.
-            outputs_wm, kv = self.world_model(token, past_keys_values=self.keys_values_wm.get())
+            outputs_wm = self.world_model(token, past_keys_values=self.keys_values_wm.get())
             output_sequence.append(outputs_wm.output_sequence)
-            self.keys_values_wm.update(kv)
+            self.keys_values_wm.update(outputs_wm.keys_values)
 
             if k == 0:
                 reward = Categorical(logits=outputs_wm.logits_rewards).sample().float().cpu().numpy().reshape(-1) - 1   # (B,)

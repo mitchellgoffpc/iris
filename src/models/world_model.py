@@ -12,7 +12,7 @@ from .tokenizer import Tokenizer
 from .transformer import Transformer, TransformerConfig
 from utils import init_weights, LossWithIntermediateLosses
 
-WorldModelOutput = namedtuple('WorldModelOutput', ['output_sequence', 'logits_observations', 'logits_rewards', 'logits_ends'])
+WorldModelOutput = namedtuple('WorldModelOutput', ['output_sequence', 'logits_observations', 'logits_rewards', 'logits_ends', 'keys_values'])
 
 
 class WorldModel(nn.Module):
@@ -76,7 +76,7 @@ class WorldModel(nn.Module):
         logits_rewards = self.head_rewards(x, num_steps=num_steps, prev_steps=prev_steps)
         logits_ends = self.head_ends(x, num_steps=num_steps, prev_steps=prev_steps)
 
-        return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends), kv
+        return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends, kv)
 
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, **kwargs: Any) -> LossWithIntermediateLosses:
         with torch.no_grad():
