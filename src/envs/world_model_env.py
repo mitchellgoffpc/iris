@@ -2,6 +2,8 @@ import random
 from typing import List, Optional, Union
 
 import gym
+import onnx
+import onnxruntime as ort
 from einops import rearrange
 import numpy as np
 from PIL import Image
@@ -9,6 +11,23 @@ import torch
 from torch.distributions.categorical import Categorical
 import torchvision
 from models.world_model import WorldModelOutput
+
+
+class Encoder(torch.nn.Module):
+    def __init__(self, tokenizer):
+        super().__init__()
+        self.tokenizer = tokenizer
+    def forward(self, observations):
+        return self.tokenizer.encode(observations, should_preprocess=True).tokens
+
+class Decoder(torch.nn.Module):
+    def __init__(self, tokenizer):
+        super().__init__()
+        self.tokenizer = tokenizer
+    def forward(self, tokens):
+        z = self.tokenizer.embedding(tokens)
+        z = rearrange(z, 'b (h w) e -> b e h w', h=int(np.sqrt(4*4)))
+        return self.tokenizer.decode(z, should_postprocess=True)
 
 
 class WorldModelEnv:
@@ -19,7 +38,7 @@ class WorldModelEnv:
         self.keys_values_wm, self.obs_tokens, self._num_observations_tokens = None, None, None
         self.env = env
 
-        import onnx, numpy as np, onnxruntime as ort
+        # Export world model
         dummy_tokens = torch.zeros(4, 16, dtype=torch.long)
         dummy_kv = world_model.transformer.generate_empty_keys_values(4, self.world_model.config.max_tokens // 2)
         dummy_kv._size = self.world_model.config.max_tokens // 2
@@ -35,9 +54,30 @@ class WorldModelEnv:
             'logits_done': {0: 'b', 1: 't_done'},
             'kv': {2: 'b', 3: 'nh', 4: 't', 5: 'hs'}})
 
+        # Export encoder
+        dummy_img = torch.zeros(4, 3, 64, 64)
+        encoder = Encoder(self.tokenizer)
+        torch.onnx.export(encoder, dummy_img, '/tmp/enc.onnx', opset_version=11,
+          input_names=['img'],
+          output_names=['tokens'],
+          dynamic_axes={
+            'img': {0: 'b', 1: 't'},
+            'tokens': {0: 'b', 1: 't'}})
+
+        # Export decoder
+        dummy_tokens = torch.zeros(8, 4*4).long()
+        decoder = Decoder(self.tokenizer)
+        torch.onnx.export(decoder, dummy_tokens, '/tmp/dec.onnx', opset_version=11,
+          input_names=['tokens'],
+          output_names=['img'],
+          dynamic_axes={
+            'tokens': {0: 'b', 1: 't'},
+            'img': {0: 'b', 1: 't'}})
+
+        # Runners
         self.wm_runner = ort.InferenceSession('/tmp/wm.onnx', None, ['CPUExecutionProvider'])
-        self.input_names = [x.name for x in self.wm_runner.get_inputs()]
-        self.output_names = [x.name for x in self.wm_runner.get_outputs()]
+        self.enc_runner = ort.InferenceSession('/tmp/enc.onnx', None, ['CPUExecutionProvider'])
+        self.dec_runner = ort.InferenceSession('/tmp/dec.onnx', None, ['CPUExecutionProvider'])
 
 
     @property
@@ -52,11 +92,12 @@ class WorldModelEnv:
 
     @torch.no_grad()
     def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
-        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True).tokens    # (B, C, H, W) -> (B, K)
+        obs_tokens = self.enc_runner.run(None, {'img': observations.numpy()})[0]  # (B, C, H, W) -> (B, K)
         _, num_observations_tokens = obs_tokens.shape
         if self.num_observations_tokens is None:
             self._num_observations_tokens = num_observations_tokens
 
+        obs_tokens = torch.as_tensor(obs_tokens)
         self.refresh_keys_values_with_initial_obs_tokens(obs_tokens)
         self.obs_tokens = obs_tokens
 
@@ -112,9 +153,8 @@ class WorldModelEnv:
 
     @torch.no_grad()
     def decode_obs_tokens(self) -> List[Image.Image]:
-        embedded_tokens = self.tokenizer.embedding(self.obs_tokens)     # (B, K, E)
-        z = rearrange(embedded_tokens, 'b (h w) e -> b e h w', h=int(np.sqrt(self.num_observations_tokens)))
-        rec = self.tokenizer.decode(z, should_postprocess=True)         # (B, C, H, W)
+        rec = self.dec_runner.run(None, {'tokens': self.obs_tokens.numpy()})[0]
+        rec = torch.as_tensor(rec)
         return torch.clamp(rec, 0, 1)
 
     @torch.no_grad()
