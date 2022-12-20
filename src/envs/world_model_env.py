@@ -12,6 +12,8 @@ from torch.distributions.categorical import Categorical
 import torchvision
 from models.world_model import WorldModelOutput
 
+TORCH_TO_NP_DTYPES = {torch.float32: np.float32, torch.int64: np.int64}
+
 
 class Encoder(torch.nn.Module):
     def __init__(self, tokenizer):
@@ -36,10 +38,17 @@ class OnnxRunner:
         self.sess = ort.InferenceSession(onnx_path, None, ['CPUExecutionProvider'])
         self.input_names = [x.name for x in self.sess.get_inputs()]
         self.output_names = [x.name for x in self.sess.get_outputs()]
+        self.iobinding = self.sess.io_binding()
+        self.input_shapes, self.output_bufs = {}, {}
 
     def run(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        results = self.sess.run(None, {k:v.numpy() for k,v in inputs.items()})
-        return {k:torch.as_tensor(v) for k,v in zip(self.output_names, results)}
+        for node in self.sess.get_inputs():
+            buffer = inputs[node.name]
+            self.iobinding.bind_input(name=node.name, device_type=buffer.device.type, device_id=0, element_type=TORCH_TO_NP_DTYPES[buffer.dtype], shape=buffer.shape, buffer_ptr=buffer.data_ptr())
+        for node in self.sess.get_outputs():
+            self.iobinding.bind_output(name=node.name, device_type='cuda')
+        self.sess.run_with_iobinding(self.iobinding)
+        return {k:torch.as_tensor(v.numpy()) for k,v in zip(self.output_names, self.iobinding.get_outputs())}
 
 
 
