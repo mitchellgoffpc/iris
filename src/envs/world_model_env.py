@@ -29,6 +29,13 @@ class Decoder(torch.nn.Module):
         z = rearrange(z, 'b (h w) e -> b e h w', h=int(np.sqrt(4*4)))
         return self.tokenizer.decode(z, should_postprocess=True)
 
+class OnnxRunner:
+    def __init__(self, onnx_path):
+        self.sess = ort.InferenceSession(onnx_path, None, ['CPUExecutionProvider'])
+    def run(self, inputs):
+        return self.sess.run(None, inputs)
+
+
 
 class WorldModelEnv:
     def __init__(self, tokenizer: torch.nn.Module, world_model: torch.nn.Module, device: Union[str, torch.device], env: Optional[gym.Env] = None) -> None:
@@ -75,9 +82,9 @@ class WorldModelEnv:
             'img': {0: 'b', 1: 't'}})
 
         # Runners
-        self.wm_runner = ort.InferenceSession('/tmp/wm.onnx', None, ['CPUExecutionProvider'])
-        self.enc_runner = ort.InferenceSession('/tmp/enc.onnx', None, ['CPUExecutionProvider'])
-        self.dec_runner = ort.InferenceSession('/tmp/dec.onnx', None, ['CPUExecutionProvider'])
+        self.wm_runner = OnnxRunner('/tmp/wm.onnx')
+        self.enc_runner = OnnxRunner('/tmp/enc.onnx')
+        self.dec_runner = OnnxRunner('/tmp/dec.onnx')
 
 
     @property
@@ -92,7 +99,7 @@ class WorldModelEnv:
 
     @torch.no_grad()
     def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
-        obs_tokens = self.enc_runner.run(None, {'img': observations.numpy()})[0]  # (B, C, H, W) -> (B, K)
+        obs_tokens = self.enc_runner.run({'img': observations.numpy()})[0]  # (B, C, H, W) -> (B, K)
         _, num_observations_tokens = obs_tokens.shape
         if self.num_observations_tokens is None:
             self._num_observations_tokens = num_observations_tokens
@@ -108,7 +115,7 @@ class WorldModelEnv:
         n, num_observations_tokens = obs_tokens.shape
         assert num_observations_tokens == self.num_observations_tokens
         self.keys_values_wm = self.world_model.transformer.generate_empty_keys_values(n=n, max_tokens=self.world_model.config.max_tokens)
-        outputs_wm = self.wm_runner.run(None, {'tokens': obs_tokens.numpy(), 'past': self.keys_values_wm.get().numpy()})
+        outputs_wm = self.wm_runner.run({'tokens': obs_tokens.numpy(), 'past': self.keys_values_wm.get().numpy()})
         outputs_wm = WorldModelOutput(*outputs_wm)
         self.keys_values_wm.update(torch.as_tensor(outputs_wm.keys_values))
 
@@ -125,7 +132,7 @@ class WorldModelEnv:
 
         output_sequence, obs_tokens = [], []
         for k in range(num_passes):  # assumption that there is only one action token.
-            outputs_wm = self.wm_runner.run(None, {'tokens': token.numpy(), 'past': self.keys_values_wm.get().numpy()})
+            outputs_wm = self.wm_runner.run({'tokens': token.numpy(), 'past': self.keys_values_wm.get().numpy()})
             outputs_wm = [torch.as_tensor(x) for x in outputs_wm]
             outputs_wm = WorldModelOutput(*outputs_wm)
             output_sequence.append(outputs_wm.output_sequence)
@@ -153,7 +160,7 @@ class WorldModelEnv:
 
     @torch.no_grad()
     def decode_obs_tokens(self) -> List[Image.Image]:
-        rec = self.dec_runner.run(None, {'tokens': self.obs_tokens.numpy()})[0]
+        rec = self.dec_runner.run({'tokens': self.obs_tokens.numpy()})[0]
         rec = torch.as_tensor(rec)
         return torch.clamp(rec, 0, 1)
 
