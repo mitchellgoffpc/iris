@@ -32,13 +32,13 @@ def child_env(child_id: int, env_fn: Callable, child_conn: Connection) -> None:
     while True:
         message_type, content = child_conn.recv()
         if message_type == MessageType.RESET:
-            obs = env.reset()
-            child_conn.send(Message(MessageType.RESET_RETURN, obs))
+            obs, _ = env.reset()
+            child_conn.send(Message(MessageType.RESET_RETURN, (obs, None)))
         elif message_type == MessageType.STEP:
-            obs, rew, done, _ = env.step(content)
+            obs, rew, done, trunc, _ = env.step(content)
             if done:
-                obs = env.reset()
-            child_conn.send(Message(MessageType.STEP_RETURN, (obs, rew, done, None)))
+                obs, _ = env.reset()
+            child_conn.send(Message(MessageType.STEP_RETURN, (obs, rew, done, trunc, None)))
         elif message_type == MessageType.CLOSE:
             child_conn.close()
             return
@@ -69,21 +69,23 @@ class MultiProcessEnv(DoneTrackerEnv):
             assert all([m.type == check_type for m in messages])
         return [m.content for m in messages]
 
-    def reset(self) -> np.ndarray:
+    def reset(self) -> Tuple[np.ndarray, Any]:
         self.reset_done_tracker()
         for parent_conn in self.parent_conns:
             parent_conn.send(Message(MessageType.RESET))
         content = self._receive(check_type=MessageType.RESET_RETURN)
-        return np.stack(content)
+        obs, _ = zip(*content)
+        return np.stack(obs), None
 
     def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
         for parent_conn, action in zip(self.parent_conns, actions):
             parent_conn.send(Message(MessageType.STEP, action))
         content = self._receive(check_type=MessageType.STEP_RETURN)
-        obs, rew, done, _ = zip(*content)
+        obs, rew, done, trunc, _ = zip(*content)
         done = np.stack(done)
+        trunc = np.stack(trunc)
         self.update_done_tracker(done)
-        return np.stack(obs), np.stack(rew), done, None
+        return np.stack(obs), np.stack(rew), done, trunc, None
 
     def close(self) -> None:
         for parent_conn in self.parent_conns:

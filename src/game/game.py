@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import pygame
 from PIL import Image
@@ -61,7 +61,7 @@ class Game:
         else:
             self.env.reset()
             img = self.env.render()
-        
+
         draw_game(img)
 
         clear_header()
@@ -73,7 +73,7 @@ class Game:
 
         do_reset, do_wait = False, False
         should_stop = False
-        
+
         while not should_stop:
 
             action = 0  # noop
@@ -88,11 +88,11 @@ class Game:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_PERIOD:
                     do_wait = not do_wait
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_COMMA:
-                    if not recording: 
+                    if not recording:
                         recording = True
                         print('Started recording.')
                     else:
-                        print('Stopped recording.')    
+                        print('Stopped recording.')
                         self.save_recording(np.stack(segment_buffer))
                         recording = False
                         segment_buffer = []
@@ -108,7 +108,7 @@ class Game:
             if do_wait:
                 continue
 
-            _, reward, done, info = self.env.step(action)
+            _, reward, done, _, info = self.env.step(action)
 
             img = info['rgb'] if isinstance(self.env, gym.Env) else self.env.render()
             draw_game(img)

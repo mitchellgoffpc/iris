@@ -29,17 +29,17 @@ class AgentEnv:
         return obs[0].mul(255).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
 
     def reset(self):
-        obs = self.env.reset()
+        obs, info = self.env.reset()
         self.obs = self._to_tensor(obs) if isinstance(self.env, SingleProcessEnv) else obs
         self.agent.actor_critic.reset(1)
         self._t = 0
         self._return = 0
-        return obs
+        return obs, info
 
     def step(self, *args, **kwargs) -> torch.FloatTensor:
         with torch.no_grad():
             act = self.agent.act(self.obs, should_sample=True).cpu().numpy()
-        obs, reward, done, _ = self.env.step(act)
+        obs, reward, done, trunc, _ = self.env.step(act)
         self.obs = self._to_tensor(obs) if isinstance(self.env, SingleProcessEnv) else obs
         self._t += 1
         self._return += reward[0]
@@ -48,7 +48,7 @@ class AgentEnv:
             'action': self.action_names[act[0]],
             'return': self._return,
         }
-        return obs, reward, done, info
+        return obs, reward, done, trunc, info
 
     def render(self) -> Image.Image:
         assert self.obs.size() == (1, 3, 64, 64)

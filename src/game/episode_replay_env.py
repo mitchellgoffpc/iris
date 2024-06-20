@@ -103,7 +103,7 @@ class EpisodeReplayEnv:
             'action': self.action_names[act],
             'cum_reward': f'{sum(self.rewards[:self._t + 1]):.3f}'
         }
-        return self.observations[self._t], reward, done, info
+        return self.observations[self._t], reward, done, False, info
 
     def render(self) -> Image.Image:
         obs = self.observations[self._t]  # (C, H, W) in [0., 1.]

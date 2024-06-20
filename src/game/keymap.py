@@ -1,9 +1,8 @@
-import gym
+import gymnasium as gym
 import pygame
 
 
 def get_keymap_and_action_names(name):
-
     if name == 'empty':
         return EMPTY_KEYMAP, EMPTY_ACTION_NAMES
 

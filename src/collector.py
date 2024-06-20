@@ -20,7 +20,7 @@ class Collector:
         self.env = env
         self.dataset = dataset
         self.episode_dir_manager = episode_dir_manager
-        self.obs = self.env.reset()
+        self.obs, _ = self.env.reset()
         self.episode_ids = [None] * self.env.num_envs
         self.heuristic = RandomHeuristic(self.env.num_actions)
 
@@ -57,7 +57,7 @@ class Collector:
             if random.random() < epsilon:
                 act = self.heuristic.act(obs).cpu().numpy()
 
-            self.obs, reward, done, _ = self.env.step(act)
+            self.obs, reward, done, _, _ = self.env.step(act)
 
             actions.append(act)
             rewards.append(reward)
@@ -87,7 +87,7 @@ class Collector:
                     to_log.append({f'{self.dataset.name}/{k}': v for k, v in metrics_episode.items()})
                     returns.append(metrics_episode['episode_return'])
 
-                self.obs = self.env.reset()
+                self.obs, _ = self.env.reset()
                 self.episode_ids = [None] * self.env.num_envs
                 agent.actor_critic.reset(n=self.env.num_envs)
                 observations, actions, rewards, dones = [], [], [], []

@@ -14,16 +14,17 @@ class SingleProcessEnv(DoneTrackerEnv):
     def should_reset(self) -> bool:
         return self.num_envs_done == 1
 
-    def reset(self) -> np.ndarray:
+    def reset(self) -> Tuple[np.ndarray, Any]:
         self.reset_done_tracker()
-        obs = self.env.reset()
-        return obs[None, ...]
+        obs, info = self.env.reset()
+        return obs[None, ...], info
 
-    def step(self, action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
-        obs, reward, done, _ = self.env.step(action[0])  # action is supposed to be ndarray (1,)
+    def step(self, action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Any]:
+        obs, reward, done, trunc, _ = self.env.step(action[0])  # action is supposed to be ndarray (1,)
         done = np.array([done])
-        self.update_done_tracker(done)
-        return obs[None, ...], np.array([reward]), done, None
+        trunc = np.array([trunc])
+        self.update_done_tracker(done | trunc)
+        return obs[None, ...], np.array([reward]), done, trunc, None
 
     def render(self) -> None:
         self.env.render()

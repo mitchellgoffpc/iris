@@ -146,7 +146,7 @@ class ActorCritic(nn.Module):
 
             outputs_ac = self(obs)
             action_token = Categorical(logits=outputs_ac.logits_actions).sample()
-            obs, reward, done, _ = wm_env.step(action_token, should_predict_next_obs=(k < horizon - 1))
+            obs, reward, done, _, _ = wm_env.step(action_token, should_predict_next_obs=(k < horizon - 1))
 
             all_actions.append(action_token)
             all_logits_actions.append(outputs_ac.logits_actions)

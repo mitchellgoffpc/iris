@@ -1,7 +1,7 @@
 import random
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple, Any
 
-import gym
+import gymnasium as gym
 from einops import rearrange
 import numpy as np
 from PIL import Image
@@ -11,15 +11,12 @@ import torchvision
 
 
 class WorldModelEnv:
-
     def __init__(self, tokenizer: torch.nn.Module, world_model: torch.nn.Module, device: Union[str, torch.device], env: Optional[gym.Env] = None) -> None:
-
         self.device = torch.device(device)
         self.world_model = world_model.to(self.device).eval()
         self.tokenizer = tokenizer.to(self.device).eval()
 
         self.keys_values_wm, self.obs_tokens, self._num_observations_tokens = None, None, None
-
         self.env = env
 
     @property
@@ -27,10 +24,11 @@ class WorldModelEnv:
         return self._num_observations_tokens
 
     @torch.no_grad()
-    def reset(self) -> torch.FloatTensor:
+    def reset(self) -> Tuple[torch.FloatTensor, Any]:
         assert self.env is not None
-        obs = torchvision.transforms.functional.to_tensor(self.env.reset()).to(self.device).unsqueeze(0)  # (1, C, H, W) in [0., 1.]
-        return self.reset_from_initial_observations(obs)
+        obs, _ = self.env.reset()
+        obs = torchvision.transforms.functional.to_tensor(obs).to(self.device).unsqueeze(0)  # (1, C, H, W) in [0., 1.]
+        return self.reset_from_initial_observations(obs), None
 
     @torch.no_grad()
     def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
@@ -83,7 +81,7 @@ class WorldModelEnv:
         self.obs_tokens = torch.cat(obs_tokens, dim=1)        # (B, K)
 
         obs = self.decode_obs_tokens() if should_predict_next_obs else None
-        return obs, reward, done, None
+        return obs, reward, done, False, None
 
     @torch.no_grad()
     def render_batch(self) -> List[Image.Image]:
