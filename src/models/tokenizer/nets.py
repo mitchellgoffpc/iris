@@ -7,6 +7,7 @@ from typing import List
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 @dataclass
@@ -336,27 +337,19 @@ class AttnBlock(nn.Module):
                                         padding=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h_ = x
-        h_ = self.norm(h_)
-        q = self.q(h_)
-        k = self.k(h_)
-        v = self.v(h_)
+        h = self.norm(x)
+        q = self.q(h)
+        k = self.k(h)
+        v = self.v(h)
 
         # compute attention
-        b, c, h, w = q.shape
-        q = q.reshape(b, c, h * w)
-        q = q.permute(0, 2, 1)      # b,hw,c
-        k = k.reshape(b, c, h * w)  # b,c,hw
-        w_ = torch.bmm(q, k)        # b,hw,hw    w[b,i,j]=sum_c q[b,i,c]k[b,c,j]
-        w_ = w_ * (int(c) ** (-0.5))
-        w_ = torch.nn.functional.softmax(w_, dim=2)
+        B, C, H, W = q.shape
+        q = q.view(B, C, H * W).permute(0, 2, 1)  # B, HW, C
+        k = k.view(B, C, H * W).permute(0, 2, 1)
+        v = v.view(B, C, H * W).permute(0, 2, 1)
 
-        # attend to values
-        v = v.reshape(b, c, h * w)
-        w_ = w_.permute(0, 2, 1)   # b,hw,hw (first hw of k, second of q)
-        h_ = torch.bmm(v, w_)     # b, c,hw (hw of q) h_[b,c,j] = sum_i v[b,c,i] w_[b,i,j]
-        h_ = h_.reshape(b, c, h, w)
+        h = F.scaled_dot_product_attention(q, k, v)
+        h = h.permute(0, 2, 1).view(B, C, H, W)
+        h = self.proj_out(h)
 
-        h_ = self.proj_out(h_)
-
-        return x + h_
+        return x + h

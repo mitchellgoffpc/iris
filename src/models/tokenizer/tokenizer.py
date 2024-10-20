@@ -34,9 +34,6 @@ class Tokenizer(nn.Module):
         self.embedding.weight.data.uniform_(-1.0 / vocab_size, 1.0 / vocab_size)
         self.lpips = LPIPS().eval() if with_lpips else None
 
-    def __repr__(self) -> str:
-        return "tokenizer"
-
     def forward(self, x: torch.Tensor, should_preprocess: bool = False, should_postprocess: bool = False) -> Tuple[torch.Tensor]:
         outputs = self.encode(x, should_preprocess)
         decoder_input = outputs.z + (outputs.z_quantized - outputs.z).detach()
