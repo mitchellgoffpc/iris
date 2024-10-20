@@ -107,7 +107,7 @@ class EpisodesDataset:
         episode_ids = sorted([int(p.stem) for p in directory.iterdir()])
         self.num_seen_episodes = episode_ids[-1] + 1
         for episode_id in episode_ids:
-            episode = Episode(**torch.load(directory / f'{episode_id}.pt'))
+            episode = Episode(**torch.load(directory / f'{episode_id}.pt', weights_only=True))
             self.episode_id_to_queue_idx[episode_id] = len(self.episodes)
             self.episodes.append(episode)
 

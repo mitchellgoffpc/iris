@@ -32,7 +32,7 @@ class LPIPS(nn.Module):
 
     def load_from_pretrained(self) -> None:
         ckpt = get_ckpt_path(name="vgg_lpips", root=Path.home() / ".cache/iris/tokenizer_pretrained_vgg")  # Download VGG if necessary
-        self.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")), strict=False)
+        self.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu"), weights_only=True), strict=False)
 
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         in0_input, in1_input = (self.scaling_layer(input), self.scaling_layer(target))
